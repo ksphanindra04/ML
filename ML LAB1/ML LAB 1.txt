@@ -1,0 +1,86 @@
+import pandas as pd
+import numpy as np
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from scipy import stats
+
+def createdata():
+    data = {
+        'Age': np.random.randint(18, 70, size=20),
+        'Salary': np.random.randint(30000, 120000, size=20),
+        'Purchased': np.random.choice([0, 1], size=20),
+        'Gender': np.random.choice(['Male', 'Female'], size=20),
+        'City': np.random.choice(['New York', 'San Francisco', 'Los Angeles'], size=20)
+    }
+    return pd.DataFrame(data)
+
+df = createdata()
+
+df.loc[5, 'Age'] = np.nan
+df.loc[10, 'Salary'] = np.nan
+
+print(df.info())
+print(df.describe())
+
+missing_values = df.isnull().sum()
+print(missing_values[missing_values > 0])
+
+imputer1 = SimpleImputer(strategy="median")
+imputer2 = SimpleImputer(strategy="mean")
+
+df_copy = df.copy()
+
+df_copy[['Age']] = imputer1.fit_transform(df_copy[['Age']])
+df_copy[['Salary']] = imputer2.fit_transform(df_copy[['Salary']])
+
+ordinal_encoder = OrdinalEncoder(categories=[['Male', 'Female']])
+df_copy['Gender_Encoded'] = ordinal_encoder.fit_transform(df_copy[['Gender']])
+
+onehot_encoder = OneHotEncoder(sparse_output=False)
+encoded_array = onehot_encoder.fit_transform(df_copy[['City']])
+encoded_df = pd.DataFrame(encoded_array, columns=onehot_encoder.get_feature_names_out(['City']))
+
+df_encoded = pd.concat([df_copy, encoded_df], axis=1)
+df_encoded.drop(['Gender', 'City'], axis=1, inplace=True)
+
+normalizer = MinMaxScaler()
+df_encoded[['Salary']] = normalizer.fit_transform(df_encoded[['Salary']])
+
+scaler = StandardScaler()
+df_encoded[['Age']] = scaler.fit_transform(df_encoded[['Age']])
+
+df_encoded_copy1 = df_encoded.copy()
+df_encoded_copy2 = df_encoded.copy()
+df_encoded_copy3 = df_encoded.copy()
+
+Q1 = df_encoded_copy1['Salary'].quantile(0.25)
+Q3 = df_encoded_copy1['Salary'].quantile(0.75)
+IQR = Q3 - Q1
+lower_bound = Q1 - 1.5 * IQR
+upper_bound = Q3 + 1.5 * IQR
+
+df_encoded_copy1['Salary'] = np.where(
+    df_encoded_copy1['Salary'] > upper_bound,
+    upper_bound,
+    np.where(df_encoded_copy1['Salary'] < lower_bound, lower_bound, df_encoded_copy1['Salary'])
+)
+
+df_encoded_copy2['Salary_zscore'] = stats.zscore(df_encoded_copy2['Salary'])
+df_encoded_copy2['Salary'] = np.where(
+    df_encoded_copy2['Salary_zscore'].abs() > 3,
+    np.nan,
+    df_encoded_copy2['Salary']
+)
+
+df_encoded_copy3['Salary_zscore'] = stats.zscore(df_encoded_copy3['Salary'])
+median_salary = df_encoded_copy3['Salary'].median()
+df_encoded_copy3['Salary'] = np.where(
+    df_encoded_copy3['Salary_zscore'].abs() > 3,
+    median_salary,
+    df_encoded_copy3['Salary']
+)
+
+print(df_encoded_copy1.head())
+print(df_encoded_copy2.head())
+print(df_encoded_copy3.head())
